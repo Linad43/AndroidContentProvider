@@ -28,8 +28,7 @@ class SendSmsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Получаем объект Contact из Bundle
-        val contact = arguments?.getSerializable(Contact::class.java.simpleName) as Contact
+        val contact = arguments?.getParcelable<Contact>(Contact::class.java.simpleName)!!
         binding.nameTV.text = contact.name
         binding.phoneTV.text = contact.numPhone
         binding.sendBTN.setOnClickListener {

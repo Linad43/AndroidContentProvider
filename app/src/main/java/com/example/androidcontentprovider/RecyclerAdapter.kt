@@ -14,7 +14,7 @@ import com.example.androidcontentprovider.R
 class RecyclerAdapter(
     private val context: Context,
     private val listener: ContactClickListener,
-    private val contacts: MutableList<Contact>
+    private val contacts: ArrayList<Contact>
 ) : RecyclerView.Adapter<RecyclerAdapter.ContactViewHolder>() {
 
 

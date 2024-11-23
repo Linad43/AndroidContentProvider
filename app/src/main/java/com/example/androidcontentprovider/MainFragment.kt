@@ -2,11 +2,16 @@ package com.example.androidcontentprovider
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.ContentProviderOperation
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.provider.ContactsContract.CommonDataKinds.Phone
+import android.provider.ContactsContract.CommonDataKinds.StructuredName
+import android.provider.ContactsContract.RawContacts
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,7 +29,7 @@ class MainFragment : Fragment(), RecyclerAdapter.ContactClickListener {
     private var _binding: FragmentMainBinding? = null
     private val binding get() = _binding!!
     private var recyclerAdapter: RecyclerAdapter? = null
-    private var contactList: MutableList<Contact>? = null
+    private var contactList: ArrayList<Contact>? = null
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -38,6 +43,24 @@ class MainFragment : Fragment(), RecyclerAdapter.ContactClickListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding.recyclerRV.layoutManager = LinearLayoutManager(requireContext())
+        binding.toolbar.inflateMenu(R.menu.main_menu)
+        binding.toolbar.setOnMenuItemClickListener {
+            when (it.itemId) {
+                R.id.exit -> requireActivity().finishAffinity()
+                R.id.search -> {
+                    val bundle = Bundle()
+                    val fragment = SearchFragment()
+                    bundle.putParcelableArrayList(Contact::class.java.simpleName, contactList)
+                    fragment.arguments = bundle
+                    fragmentManager
+                        ?.beginTransaction()
+                        ?.replace(R.id.container, fragment)
+                        ?.addToBackStack("")
+                        ?.commit()
+                }
+            }
+            true
+        }
         if (ActivityCompat.checkSelfPermission(
                 requireContext(),
                 Manifest.permission.READ_CONTACTS
@@ -48,6 +71,61 @@ class MainFragment : Fragment(), RecyclerAdapter.ContactClickListener {
             recyclerAdapter?.notifyDataSetChanged()
         } else {
             getContact()
+        }
+
+
+        //Добавить контакт
+        binding.addBTN.setOnClickListener {
+            if (binding.nameET.text.isNotEmpty() &&
+                binding.numPhoneET.text.isNotEmpty()
+            ) {
+                if (ActivityCompat.checkSelfPermission(
+                        requireContext(),
+                        Manifest.permission.WRITE_CONTACTS
+                    ) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    permissionWriteContact.launch(Manifest.permission.WRITE_CONTACTS)
+                } else {
+                    addContact()
+                    recyclerAdapter!!.notifyDataSetChanged()
+                    getContact()
+                }
+            }
+        }
+    }
+
+    private fun addContact() {
+        val newContactName = binding.nameET.text.toString()
+        val newContactPhone = binding.numPhoneET.text.toString()
+        val listCPO = ArrayList<ContentProviderOperation>()
+
+        listCPO.add(
+            ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)
+                .withValue(RawContacts.ACCOUNT_TYPE, null)
+                .withValue(RawContacts.ACCOUNT_NAME, null)
+                .build()
+        )
+        listCPO.add(
+            ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
+                .withValue(StructuredName.DISPLAY_NAME, newContactName)
+                .build()
+        )
+        listCPO.add(
+            ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
+                .withValue(ContactsContract.Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE)
+                .withValue(Phone.NUMBER, newContactPhone)
+                .withValue(Phone.TYPE, Phone.TYPE_MOBILE)
+                .build()
+        )
+
+        try {
+            requireActivity().contentResolver.applyBatch(ContactsContract.AUTHORITY, listCPO)
+        } catch (e: Exception) {
+            Log.e("Exeception ", e.message!!)
         }
     }
 
@@ -92,6 +170,24 @@ class MainFragment : Fragment(), RecyclerAdapter.ContactClickListener {
             Toast.makeText(
                 requireContext(),
                 "Получен доступ к контактам",
+                Toast.LENGTH_SHORT
+            ).show()
+            getContact()
+        } else {
+            Toast.makeText(
+                requireContext(),
+                "В разрешении отказано",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+    private val permissionWriteContact = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Toast.makeText(
+                requireContext(),
+                "Получен доступ к записи контактов",
                 Toast.LENGTH_SHORT
             ).show()
             getContact()
@@ -151,12 +247,13 @@ class MainFragment : Fragment(), RecyclerAdapter.ContactClickListener {
 
     override fun onItemClickedSend(contact: Contact) {
         if (requireContext().checkSelfPermission(Manifest.permission.SEND_SMS) !=
-              PackageManager.PERMISSION_GRANTED  ) {
+            PackageManager.PERMISSION_GRANTED
+        ) {
             permissionOfSms.launch(Manifest.permission.SEND_SMS)
         } else {
             val fragment = SendSmsFragment()
             val bundle = Bundle()
-            bundle.putSerializable(Contact::class.java.simpleName, contact)
+            bundle.putParcelable(Contact::class.java.simpleName, contact)
             fragment.arguments = bundle
             fragmentManager
                 ?.beginTransaction()
